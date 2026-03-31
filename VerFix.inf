@@ -1,0 +1,47 @@
+## @file
+#  VerFix - VER partition repair utility.
+#
+#  Reads A_VER and B_VER QSPI partitions, classifies each as VALID,
+#  REPAIRABLE (NV4 structure intact, CRC recomputed from lines 1-5), or
+#  GARBAGE, and heals as needed without an external file in the common
+#  cases.  Falls back to version.txt on the ESP only when both partitions
+#  are unreadable.  Intended to be run from UEFI Shell via startup.nsh to
+#  fix a broken CRC field that prevents capsule updates (LAS 6162).
+#
+#  Copyright (c) 2026, Contributors. All rights reserved.
+#  SPDX-License-Identifier: BSD-2-Clause-Patent
+##
+
+[Defines]
+  INF_VERSION     = 0x00010019
+  BASE_NAME       = VerFix
+  FILE_GUID       = 7a3f2891-4c5d-4e6f-8b7a-1d2e3f4a5b6c
+  MODULE_TYPE     = UEFI_APPLICATION
+  VERSION_STRING  = 1.0
+  ENTRY_POINT     = VerFixEntry
+
+[Sources]
+  VerFix.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+  MdeModulePkg/MdeModulePkg.dec
+  Silicon/NVIDIA/NVIDIA.dec
+
+[LibraryClasses]
+  UefiApplicationEntryPoint
+  UefiBootServicesTableLib
+  UefiLib
+  PrintLib
+  MemoryAllocationLib
+  BaseMemoryLib
+  BaseLib
+  DebugLib
+
+[Protocols]
+  gNVIDIAFwPartitionProtocolGuid        ## CONSUMES
+  gEfiLoadedImageProtocolGuid           ## CONSUMES
+  gEfiSimpleFileSystemProtocolGuid      ## CONSUMES
+
+[Guids]
+  gEfiFileInfoGuid                      ## CONSUMES
