@@ -8,8 +8,8 @@
 #  are unreadable.  Intended to be run from UEFI Shell via startup.nsh to
 #  fix a broken CRC field that prevents capsule updates (LAS 6162).
 #
-#  Copyright (c) 2026, Contributors. All rights reserved.
-#  SPDX-License-Identifier: BSD-2-Clause-Patent
+#  Copyright (c) 2026 Vit Holasek
+#  SPDX-License-Identifier: MIT
 ##
 
 [Defines]

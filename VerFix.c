@@ -34,8 +34,8 @@
          GARBAGE    -> copy from the other healthy/repaired slot.
          Both GARBAGE with no version.txt -> cannot repair.
 
-  Copyright (c) 2026, Contributors. All rights reserved.
-  SPDX-License-Identifier: BSD-2-Clause-Patent
+  Copyright (c) 2026 Vit Holasek
+  SPDX-License-Identifier: MIT
 **/
 
 #include <Uefi.h>

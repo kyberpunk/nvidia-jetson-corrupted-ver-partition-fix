@@ -538,6 +538,6 @@ No external or out-of-tree dependencies.
 
 ## License
 
-BSD-2-Clause-Patent — see `VerFix.c` header.
+MIT — see [LICENSE](LICENSE).
 
 Platform: Jetson Orin AGX T234 · BSP R35.x / R36.x · Updated 2026-03-31
