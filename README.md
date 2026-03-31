@@ -71,13 +71,15 @@ SetTheImage() LastAttemptStatus: 6162
 
 ---
 
-## 2. Root Cause — `flash.sh` CRC Bug
+## 2. Root Cause — `flash.sh` CRC Bug and UEFI Failure Chain
 
 | Property | Value |
 |----------|---------|
 | File | `Linux_for_Tegra/flash.sh` |
 | Line | 3076 |
 | Effect | CRC32 field is silently written as empty; UEFI reads `0` instead of the real CRC |
+
+### How the partition gets corrupted
 
 The VER partition is written by `flash.sh` during the full device flash. A
 combination of environment issues on the flash host (such as a missing `python`
@@ -89,8 +91,68 @@ partition is then written to QSPI with a blank CRC field:
 BYTES:85 CRC32:
 ```
 
-The key symptom is the **empty value after `CRC32:`**. UEFI parses it as `0`;
-the actual computed CRC is non-zero → mismatch → `EFI_VOLUME_CORRUPTED`.
+The key symptom is the **empty value after `CRC32:`**. Both the A and B slots
+are typically corrupted at the same time because `flash.sh` writes them both
+in the same pass.
+
+### Why OTA (capsule update) fails
+
+At boot, before any capsule update is attempted, the UEFI Firmware Management
+Protocol (FMP) library reads the VER partition to establish the current firmware
+version. The failure propagates through three layers:
+
+**Layer 1 — CRC parse (`VerPartitionLib.c :: VerPartitionGetVersion`)**
+
+`AsciiStrHexToUintn("")` silently returns `0` when given an empty string.
+The expected CRC is therefore stored as `0`, while the actual CRC computed over
+the partition content is a non-zero value (e.g., `0xA10A2457`). The mismatch
+causes the function to return `EFI_VOLUME_CORRUPTED` and abort.
+
+**Layer 2 — Version initialisation (`TegraFmp.c :: GetVersionInfo`)**
+
+`VerPartitionGetVersion()` failed, so `GetVersionInfo` jumps to its `Done`
+label without setting `mFmpLibInitialized = TRUE`. The FMP library remains
+in an uninitialised state for the entire boot.
+
+**Layer 3 — Capsule gate (`TegraFmp.c :: FmpTegraCheckImage`)**
+
+Every capsule update is pre-validated by `FmpTegraCheckImage`. Its very first
+check is:
+
+```c
+if (!mFmpLibInitialized) {
+    *LastAttemptStatus = LAS_ERROR_FMP_LIB_UNINITIALIZED;  // 6162
+    return EFI_NOT_READY;
+}
+```
+
+Because `mFmpLibInitialized` is still `FALSE`, the capsule is rejected before
+any image validation even begins.
+
+**Annotated call trace**
+
+```
+VerPartitionLib.c :: VerPartitionGetVersion()
+  AsciiStrHexToUintn("") → 0      ← empty string parsed as 0
+  CrcExpected = 0
+  CrcReceived = 0xA10A2457        ← actual CRC over lines 1-5
+  0 ≠ 0xA10A2457  →  EFI_VOLUME_CORRUPTED
+
+TegraFmp.c :: GetVersionInfo()
+  VerPartitionGetVersion() failed  →  goto Done
+  mFmpLibInitialized stays FALSE
+
+TegraFmp.c :: FmpTegraCheckImage()
+  if (!mFmpLibInitialized)
+      *LastAttemptStatus = 6162   ← LAS_ERROR_FMP_LIB_UNINITIALIZED
+      return EFI_NOT_READY
+```
+
+> ⚠️ **Brick risk:** The UEFI update flow writes the new OS image to the
+> inactive slot *before* attempting to apply the bootloader capsule. If the
+> capsule is then rejected (as above), the device is left with a new OS image
+> but an old, incompatible bootloader — a mismatch that can prevent the device
+> from booting at all.
 
 Existing corrupted devices need `VerFix.efi` (see Section 5).
 
@@ -423,27 +485,6 @@ Build/Jetson/RELEASE_GCC5/AARCH64/VerFix.efi
 No external or out-of-tree dependencies.
 
 ---
-
-## 7. Why OTA Fails (Callstack)
-
-```
-VerPartitionLib.c :: VerPartitionGetVersion()
-  AsciiStrHexToUintn("") → 0      ← empty string parsed as 0
-  CrcExpected = 0
-  CrcReceived = 0xA10A2457        ← actual CRC over lines 1-5
-  0 ≠ 0xA10A2457  →  EFI_VOLUME_CORRUPTED
-
-TegraFmp.c :: GetVersionInfo()
-  VerPartitionGetVersion() failed  →  goto Done
-  mFmpLibInitialized stays FALSE
-
-TegraFmp.c :: FmpTegraCheckImage()
-  if (!mFmpLibInitialized)
-      *LastAttemptStatus = 6162   ← LAS_ERROR_FMP_LIB_UNINITIALIZED
-      return EFI_NOT_READY
-  → OTA silently fails
-  → ⚠️ BRICK RISK: new OS may have been written already
-```
 
 ---
 
