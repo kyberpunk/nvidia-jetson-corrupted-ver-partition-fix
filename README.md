@@ -13,6 +13,35 @@ modules that store their bootloader on **QSPI NOR flash** — specifically:
 The bug causes all OTA capsule updates to be permanently rejected with
 `LastAttemptStatus: 6162 (LAS_ERROR_FMP_LIB_UNINITIALIZED)`.
 
+## Motivation
+
+Once a Jetson device is deployed to the field, the primary path for updating
+the bootloader (and OS) is an **OTA capsule update** delivered over the network.
+When the VER partitions are corrupted, this mechanism is completely blocked —
+the UEFI FMP library refuses to accept any capsule, so the device is stuck on
+its current firmware version indefinitely.
+
+The obvious recovery path — **re-flashing the device** — is impractical in
+most field deployments:
+
+- It requires a USB connection (or a UART console + physical QSPI programmer)
+  directly to the device.
+- Field devices are typically installed in enclosures, vehicles, or remote
+  locations where hands-on access is costly and slow.
+- Coordinating a physical recall or a field engineer visit is expensive and
+  introduces significant downtime.
+
+**Repairing from the running Linux OS is not an option either.** The QSPI NOR
+flash that holds the VER partitions is managed exclusively by the UEFI/TF-A
+firmware stack; the Linux kernel does not expose a writable interface to it from
+userspace on T234 platforms. There is no `/dev/mtd*` or equivalent device node
+that a shell script could use to patch the partition in place.
+
+`VerFix.efi` is the workaround: a small UEFI Shell application that runs
+*before* the OS boots, repairs both VER partitions entirely within UEFI where
+QSPI access is available, and then hands off to the normal boot path — restoring
+OTA capability without any physical intervention.
+
 ---
 
 > ⚠️ **Disclaimer**
