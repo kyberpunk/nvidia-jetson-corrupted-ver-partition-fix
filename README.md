@@ -38,7 +38,7 @@ The bug causes all OTA capsule updates to be permanently rejected with
 |------|---------|
 | `VerFix.c` | UEFI application source |
 | `VerFix.inf` | EDK2 module descriptor |
-| `VerFix.efi` | Pre-built AArch64 RELEASE binary (44 KB) |
+| `VerFix.efi` | Pre-built AArch64 RELEASE binary (44 KB) — built for **L4T R35.4.1 / JetPack 5.1.3** (edk2-nvidia `r35.4.1+4`, commit `52cefd45`) |
 | `startup.nsh` | UEFI Shell auto-run script |
 
 ---
@@ -415,6 +415,25 @@ sudo umount /esp_mount
 ---
 
 ## 6. Building VerFix.efi
+
+### 6.0 Pre-built binary provenance
+
+The `VerFix.efi` checked into this repository was compiled from the source in
+this repo against the following codebase:
+
+| Property | Value |
+|----------|-------|
+| **L4T / BSP** | R35.4.1 (JetPack 5.1.3) |
+| **UEFI release tag** | `uefi-202210.3` / `r35.4.1` |
+| **edk2-nvidia commit** | `52cefd45` (4 commits ahead of `r35.4.1`) |
+| **Build target** | `RELEASE`, `AARCH64`, `GCC5` |
+| **Build date** | 2026-03-30 |
+| **BUILDID\_STRING** | `202210.3-52cefd45-dirty` |
+
+The binary **should work on any R35.x or R36.x BSP** because `VerFix.efi`
+only calls standard EDK2 boot services and the stable `NVIDIA_FW_PARTITION_PROTOCOL`
+interface, neither of which changed between those releases. If you are on a
+substantially different BSP revision, rebuild from source (see §6.1–6.3).
 
 ### 6.1 Full UEFI bootloader build (Docker)
 
