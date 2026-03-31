@@ -15,6 +15,23 @@ The bug causes all OTA capsule updates to be permanently rejected with
 
 ---
 
+> ⚠️ **Disclaimer**
+>
+> The `VerFix.efi` application in this repository was **generated with AI
+> assistance** and has been tested on a limited set of hardware configurations.
+> It may not cover all edge cases. Use it at your own risk.
+>
+> Writing to QSPI NOR flash partitions carries an inherent risk of rendering
+> the device unbootable if the written content is incorrect or the process is
+> interrupted. **The authors and contributors accept no liability** for any
+> damage to devices, data loss, or any other consequences arising from the use
+> of this software.
+>
+> Always back up any critical data and verify the partition content after repair
+> before relying on the device in production.
+
+---
+
 ## Contents
 
 | File | Purpose |
@@ -54,45 +71,28 @@ SetTheImage() LastAttemptStatus: 6162
 
 ---
 
-## 2. Root Cause — `flash.sh` Python Bug
+## 2. Root Cause — `flash.sh` CRC Bug
 
 | Property | Value |
-|----------|-------|
+|----------|---------|
 | File | `Linux_for_Tegra/flash.sh` |
 | Line | 3076 |
-| Trigger | Flash host runs Ubuntu 20.04+ without `python-is-python3` installed |
 | Effect | CRC32 field is silently written as empty; UEFI reads `0` instead of the real CRC |
 
-The problematic line in `flash.sh`:
-
-```bash
-CRC32=$( python -c 'import zlib; print("%X"%(zlib.crc32(open("'"${VERFILENAME}"'", "rb").read()) & 0xFFFFFFFF))' )
-```
-
-Ubuntu 20.04+ removed the bare `python` command. When it is absent the subshell
-returns an empty string with **no error** and no non-zero exit code. The file is
-then written to QSPI with:
+The VER partition is written by `flash.sh` during the full device flash. A
+combination of environment issues on the flash host (such as a missing `python`
+interpreter or a `zlib` import failure) can silently cause the CRC32 computation
+to return an empty string with **no error and no non-zero exit code**. The
+partition is then written to QSPI with a blank CRC field:
 
 ```
 BYTES:85 CRC32:
 ```
 
-UEFI parses the empty hex field as `0`; the actual CRC is non-zero → mismatch →
-`EFI_VOLUME_CORRUPTED`.
+The key symptom is the **empty value after `CRC32:`**. UEFI parses it as `0`;
+the actual computed CRC is non-zero → mismatch → `EFI_VOLUME_CORRUPTED`.
 
-### Fix for the flash host
-
-Apply **before** re-flashing new devices:
-
-```bash
-# Option A — install Python compatibility shim
-sudo apt install python-is-python3
-
-# Option B — patch flash.sh in place
-sed -i 's/CRC32=\$( python -c /CRC32=$( python3 -c /' Linux_for_Tegra/flash.sh
-```
-
-Existing corrupted devices still need `VerFix.efi` (see Section 4).
+Existing corrupted devices need `VerFix.efi` (see Section 5).
 
 ---
 
